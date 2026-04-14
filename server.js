@@ -13,7 +13,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 app.use(express.json());
 
 const SHOP = process.env.SHOPIFY_SHOP || "dependable-diamond-transportation.myshopify.com";
