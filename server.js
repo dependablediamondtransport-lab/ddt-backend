@@ -3,12 +3,23 @@ const cors = require("cors");
 
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: [
+    "https://dependablediamondtransportation.com",
+    "https://www.dependablediamondtransportation.com"
+  ],
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
-const SHOP = "dependable-diamond-transportation.myshopify.com";
-const CLIENT_ID = "bea1ff6b2c72a4ff8eef7e6c3b7886ca";
-const CLIENT_SECRET = "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";
+const SHOP = process.env.SHOPIFY_SHOP || "dependable-diamond-transportation.myshopify.com";
+const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID || "bea1ff6b2c72a4ff8eef7e6c3b7886ca";
+const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET || "PASTE_YOUR_SECRET_HERE";
+const PORT = process.env.PORT || 3000;
 
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
@@ -23,89 +34,122 @@ async function getAccessToken() {
     })
   });
 
-  const data = await res.json();
+  const text = await res.text();
+
+  let data = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Token response was not JSON: ${text}`);
+  }
 
   if (!res.ok || !data.access_token) {
-    throw new Error(JSON.stringify(data));
+    throw new Error(data.error_description || data.error || text || "Failed to get access token");
   }
 
   return data.access_token;
 }
 
-app.post("/create-checkout", async (req, res) => {
-  try {
-    const body = req.body;
-    const total = Number(body.total || 0);
-
-    if (!total || total <= 0) {
-      return res.status(400).json({ error: "Invalid total" });
-    }
-
-    const token = await getAccessToken();
-
-    const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": token
-      },
-      body: JSON.stringify({
-        query: `
-          mutation draftOrderCreate($input: DraftOrderInput!) {
-            draftOrderCreate(input: $input) {
-              draftOrder {
-                invoiceUrl
-              }
-              userErrors {
-                message
-              }
-            }
-          }
-        `,
-        variables: {
-          input: {
-            tags: ["DDT Calculator"],
-            note: JSON.stringify(body),
-            lineItems: [
-              {
-                title: "DDT Transportation Service",
-                quantity: 1,
-                originalUnitPriceWithCurrency: {
-                  amount: total.toFixed(2),
-                  currencyCode: "USD"
-                }
-              }
-            ]
-          }
-        }
-      })
-    });
-
-    const data = await response.json();
-
-    const error = data?.data?.draftOrderCreate?.userErrors?.[0]?.message;
-    const url = data?.data?.draftOrderCreate?.draftOrder?.invoiceUrl;
-
-    if (error) {
-      return res.status(400).json({ error });
-    }
-
-    if (!url) {
-      return res.status(500).json({ error: "No invoice URL" });
-    }
-
-    res.json({ invoiceUrl: url });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+app.post("/create-checkout", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const total = Number(body.total || 0);
+    const email = String(body.email || "").trim();
+
+    if (!Number.isFinite(total) || total <= 0) {
+      return res.status(400).json({ error: "Invalid total." });
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: "Customer email is required." });
+    }
+
+    const accessToken = await getAccessToken();
+
+    const query = `
+      mutation draftOrderCreate($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder {
+            id
+            invoiceUrl
+            status
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      input: {
+        email,
+        note: "Created by DDT calculator",
+        lineItems: [
+          {
+            title: "DDT Transportation Service",
+            quantity: 1,
+            originalUnitPriceWithCurrency: {
+              amount: total.toFixed(2),
+              currencyCode: "USD"
+            }
+          }
+        ]
+      }
+    };
+
+    console.log("=== CREATE CHECKOUT REQUEST ===");
+    console.log(JSON.stringify(variables, null, 2));
+
+    const gqlRes = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken
+      },
+      body: JSON.stringify({ query, variables })
+    });
+
+    const gqlText = await gqlRes.text();
+
+    console.log("=== SHOPIFY RAW RESPONSE ===");
+    console.log(gqlText);
+
+    let gqlData = {};
+    try {
+      gqlData = JSON.parse(gqlText);
+    } catch {
+      throw new Error(`GraphQL response was not JSON: ${gqlText}`);
+    }
+
+    const topErrors = gqlData.errors || [];
+    const userErrors = gqlData?.data?.draftOrderCreate?.userErrors || [];
+    const invoiceUrl = gqlData?.data?.draftOrderCreate?.draftOrder?.invoiceUrl;
+
+    if (topErrors.length) {
+      return res.status(400).json({ error: topErrors[0].message || "GraphQL error." });
+    }
+
+    if (userErrors.length) {
+      return res.status(400).json({ error: userErrors[0].message || "Draft order creation failed." });
+    }
+
+    if (!invoiceUrl) {
+      return res.status(500).json({ error: "No invoice URL returned." });
+    }
+
+    return res.json({ invoiceUrl });
+  } catch (error) {
+    console.error("create-checkout error:", error);
+    return res.status(500).json({ error: error.message || "Server error creating checkout." });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`DDT backend running on port ${PORT}`);
 });
