@@ -161,16 +161,10 @@ app.post("/create-checkout", async (req, res) => {
     }
 
     // FIX: convert to custom domain checkout
-    const publicInvoiceUrl = draftOrder.invoiceUrl.replace(
-      "https://dependable-diamond-transportation.myshopify.com",
-      "https://dependablediamondtransportation.com"
-    );
-
-    // small delay to ensure readiness
     await sleep(3000);
 
-    return res.json({
-      invoiceUrl: publicInvoiceUrl,
+return res.json({
+  invoiceUrl: draftOrder.invoiceUrl,
       draftOrderId: draftOrder.id,
       draftOrderName: draftOrder.name,
       ready: draftOrder.ready
