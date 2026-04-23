@@ -19,6 +19,10 @@ const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
     method: "POST",
@@ -49,7 +53,7 @@ async function getAccessToken() {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "ddt-backend-service-v1" });
+  res.json({ ok: true, version: "ddt-backend-delay-v1" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -82,7 +86,26 @@ app.post("/create-checkout", async (req, res) => {
 
     const variables = {
       input: {
-        note: "Created by DDT calculator",
+        note: [
+          "Created by DDT calculator",
+          `Trip Type: ${body.tripType || ""}`,
+          `Leg A Miles: ${body.milesA ?? 0}`,
+          `Leg A Wait Time: ${body.waitA ?? 0}`,
+          `Leg A Deadhead: ${body.deadA ?? 0}`,
+          `Leg B Miles: ${body.milesB ?? 0}`,
+          `Leg B Wait Time: ${body.waitB ?? 0}`,
+          `Leg B Deadhead: ${body.deadB ?? 0}`,
+          `Wheelchair Rental A: ${body.wheelchairRentalA ? "Yes" : "No"}`,
+          `Wheelchair Rental B: ${body.wheelchairRentalB ? "Yes" : "No"}`,
+          `OC Surcharge: ${body.ocSurcharge ?? 0}`,
+          `LA Surcharge: ${body.laSurcharge ?? 0}`,
+          `Holiday: ${body.holiday ? "Yes" : "No"}`,
+          `Weekend: ${body.weekend ? "Yes" : "No"}`,
+          `Peak: ${body.peak ? "Yes" : "No"}`,
+          `Extra Attendant: ${body.extraAttendant ? "Yes" : "No"}`,
+          `Bariatric: ${body.bariatric ? "Yes" : "No"}`,
+          `Quoted Total: $${total.toFixed(2)}`
+        ].join("\n"),
         lineItems: [
           {
             title: "DDT Transportation Service",
@@ -111,7 +134,6 @@ app.post("/create-checkout", async (req, res) => {
     });
 
     const gqlText = await gqlRes.text();
-
     console.log("=== SHOPIFY RAW RESPONSE ===");
     console.log(gqlText);
 
@@ -137,6 +159,9 @@ app.post("/create-checkout", async (req, res) => {
     if (!draftOrder?.invoiceUrl) {
       return res.status(500).json({ error: "No invoice URL returned." });
     }
+
+    // Give Shopify a moment before sending customer to checkout
+    await sleep(2500);
 
     return res.json({
       invoiceUrl: draftOrder.invoiceUrl,
