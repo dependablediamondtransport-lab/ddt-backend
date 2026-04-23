@@ -133,18 +133,16 @@ app.post("/create-checkout", async (req, res) => {
           `Bariatric: ${body.bariatric ? "Yes" : "No"}`,
           `Quoted Total: $${total.toFixed(2)}`
         ].join("\n"),
-        lineItems: [
-          {
-            title: "DDT Transportation Service",
-            quantity: 1,
-            originalUnitPriceWithCurrency: {
-              amount: total.toFixed(2),
-              currencyCode: "USD"
-            },
-            requiresShipping: false,
-            taxable: false
-          }
-        ]
+     lineItems: [
+  {
+    variantId: "gid://shopify/ProductVariant/46752322879665",
+    quantity: 1,
+    originalUnitPriceWithCurrency: {
+      amount: total.toFixed(2),
+      currencyCode: "USD"
+    }
+  }
+]
       }
     };
 
