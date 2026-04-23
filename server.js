@@ -49,7 +49,7 @@ async function getAccessToken() {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, version: "ddt-backend-debug-v1" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -70,7 +70,7 @@ app.post("/create-checkout", async (req, res) => {
             id
             name
             invoiceUrl
-            ready
+            status
           }
           userErrors {
             field
@@ -83,7 +83,6 @@ app.post("/create-checkout", async (req, res) => {
     const variables = {
       input: {
         note: "Created by DDT calculator",
-        reserveInventoryUntil: null,
         lineItems: [
           {
             title: "DDT Transportation Service",
@@ -141,7 +140,7 @@ app.post("/create-checkout", async (req, res) => {
       invoiceUrl: draftOrder.invoiceUrl,
       draftOrderId: draftOrder.id,
       draftOrderName: draftOrder.name,
-      ready: draftOrder.ready
+      status: draftOrder.status
     });
   } catch (error) {
     console.error("create-checkout error:", error);
