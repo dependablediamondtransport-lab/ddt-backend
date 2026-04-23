@@ -3,21 +3,20 @@ const cors = require("cors");
 
 const app = express();
 
-const corsOptions = {
+app.use(cors({
   origin: [
     "https://dependablediamondtransportation.com",
     "https://www.dependablediamondtransportation.com"
   ],
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"]
-};
+}));
 
-app.use(cors(corsOptions));
 app.use(express.json());
 
-const SHOP = process.env.SHOPIFY_SHOP || "dependable-diamond-transportation.myshopify.com";
-const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID || "bea1ff6b2c72a4ff8eef7e6c3b7886ca";
-const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET || "PASTE_YOUR_SECRET_HERE";
+const SHOP = process.env.SHOPIFY_SHOP;
+const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
+const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
 async function getAccessToken() {
@@ -34,8 +33,8 @@ async function getAccessToken() {
   });
 
   const text = await res.text();
-
   let data = {};
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -57,14 +56,9 @@ app.post("/create-checkout", async (req, res) => {
   try {
     const body = req.body || {};
     const total = Number(body.total || 0);
-    const email = String(body.email || "").trim();
 
     if (!Number.isFinite(total) || total <= 0) {
       return res.status(400).json({ error: "Invalid total." });
-    }
-
-    if (!email) {
-      return res.status(400).json({ error: "Customer email is required." });
     }
 
     const accessToken = await getAccessToken();
@@ -74,8 +68,9 @@ app.post("/create-checkout", async (req, res) => {
         draftOrderCreate(input: $input) {
           draftOrder {
             id
+            name
             invoiceUrl
-            status
+            ready
           }
           userErrors {
             field
@@ -87,8 +82,8 @@ app.post("/create-checkout", async (req, res) => {
 
     const variables = {
       input: {
-        email,
         note: "Created by DDT calculator",
+        reserveInventoryUntil: null,
         lineItems: [
           {
             title: "DDT Transportation Service",
@@ -128,7 +123,7 @@ app.post("/create-checkout", async (req, res) => {
 
     const topErrors = gqlData.errors || [];
     const userErrors = gqlData?.data?.draftOrderCreate?.userErrors || [];
-    const invoiceUrl = gqlData?.data?.draftOrderCreate?.draftOrder?.invoiceUrl;
+    const draftOrder = gqlData?.data?.draftOrderCreate?.draftOrder;
 
     if (topErrors.length) {
       return res.status(400).json({ error: topErrors[0].message || "GraphQL error." });
@@ -138,11 +133,16 @@ app.post("/create-checkout", async (req, res) => {
       return res.status(400).json({ error: userErrors[0].message || "Draft order creation failed." });
     }
 
-    if (!invoiceUrl) {
+    if (!draftOrder?.invoiceUrl) {
       return res.status(500).json({ error: "No invoice URL returned." });
     }
 
-    return res.json({ invoiceUrl });
+    return res.json({
+      invoiceUrl: draftOrder.invoiceUrl,
+      draftOrderId: draftOrder.id,
+      draftOrderName: draftOrder.name,
+      ready: draftOrder.ready
+    });
   } catch (error) {
     console.error("create-checkout error:", error);
     return res.status(500).json({ error: error.message || "Server error creating checkout." });
