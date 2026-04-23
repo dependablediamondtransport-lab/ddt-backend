@@ -53,7 +53,7 @@ async function getAccessToken() {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "ddt-backend-delay-v1" });
+  res.json({ ok: true, version: "ddt-backend-final-v1" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -160,15 +160,22 @@ app.post("/create-checkout", async (req, res) => {
       return res.status(500).json({ error: "No invoice URL returned." });
     }
 
-    // Give Shopify a moment before sending customer to checkout
-    await sleep(10000);
+    // FIX: convert to custom domain checkout
+    const publicInvoiceUrl = draftOrder.invoiceUrl.replace(
+      "https://dependable-diamond-transportation.myshopify.com",
+      "https://dependablediamondtransportation.com"
+    );
+
+    // small delay to ensure readiness
+    await sleep(3000);
 
     return res.json({
-      invoiceUrl: draftOrder.invoiceUrl,
+      invoiceUrl: publicInvoiceUrl,
       draftOrderId: draftOrder.id,
       draftOrderName: draftOrder.name,
       ready: draftOrder.ready
     });
+
   } catch (error) {
     console.error("create-checkout error:", error);
     return res.status(500).json({ error: error.message || "Server error creating checkout." });
