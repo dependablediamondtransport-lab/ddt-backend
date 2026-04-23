@@ -49,7 +49,7 @@ async function getAccessToken() {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "ddt-backend-debug-v1" });
+  res.json({ ok: true, version: "ddt-backend-service-v1" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -70,7 +70,7 @@ app.post("/create-checkout", async (req, res) => {
             id
             name
             invoiceUrl
-            status
+            ready
           }
           userErrors {
             field
@@ -90,7 +90,9 @@ app.post("/create-checkout", async (req, res) => {
             originalUnitPriceWithCurrency: {
               amount: total.toFixed(2),
               currencyCode: "USD"
-            }
+            },
+            requiresShipping: false,
+            taxable: false
           }
         ]
       }
@@ -140,7 +142,7 @@ app.post("/create-checkout", async (req, res) => {
       invoiceUrl: draftOrder.invoiceUrl,
       draftOrderId: draftOrder.id,
       draftOrderName: draftOrder.name,
-      status: draftOrder.status
+      ready: draftOrder.ready
     });
   } catch (error) {
     console.error("create-checkout error:", error);
