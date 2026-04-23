@@ -161,7 +161,7 @@ app.post("/create-checkout", async (req, res) => {
     }
 
     // Give Shopify a moment before sending customer to checkout
-    await sleep(2500);
+    await sleep(10000);
 
     return res.json({
       invoiceUrl: draftOrder.invoiceUrl,
