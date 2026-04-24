@@ -19,6 +19,9 @@ const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
+// Your original variant ID, formatted as a Global ID for GraphQL
+const VARIANT_GID = "gid://shopify/ProductVariant/47227579760817";
+
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
     method: "POST",
@@ -46,9 +49,9 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Bumped to v3 so you know when Render has finished updating!
+// Bumped to v4 to check deployment status
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "draft-order-checkout-v3" });
+  res.json({ ok: true, version: "draft-order-checkout-v4" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -62,6 +65,7 @@ app.post("/create-checkout", async (req, res) => {
 
     const accessToken = await getAccessToken();
 
+    // GraphQL mutation using your actual Shopify Variant
     const graphqlQuery = {
       query: `
         mutation draftOrderCreate($input: DraftOrderInput!) {
@@ -79,10 +83,9 @@ app.post("/create-checkout", async (req, res) => {
         input: {
           lineItems: [
             {
-              title: "Transportation Service",
+              variantId: VARIANT_GID,
               originalUnitPrice: total.toFixed(2),
-              quantity: 1,
-              requiresShipping: false
+              quantity: 1
             }
           ]
         }
@@ -108,7 +111,7 @@ app.post("/create-checkout", async (req, res) => {
 
     const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
 
-    console.log(`=== DRAFT ORDER CREATED: $${total.toFixed(2)} ===`);
+    console.log(`=== DRAFT ORDER CREATED WITH VARIANT: $${total.toFixed(2)} ===`);
 
     return res.json({
       checkoutUrl,
