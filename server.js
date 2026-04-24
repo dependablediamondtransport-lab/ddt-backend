@@ -135,7 +135,7 @@ app.post("/create-checkout", async (req, res) => {
         ].join("\n"),
      lineItems: [
   {
-    variantId: "gid://shopify/ProductVariant/46752322879665",
+    variantId: "gid://shopify/ProductVariant/47227579760817",
     quantity: 1,
     originalUnitPriceWithCurrency: {
       amount: total.toFixed(2),
