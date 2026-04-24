@@ -19,9 +19,6 @@ const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
-// Your real Variant ID
-const VARIANT_GID = "gid://shopify/ProductVariant/47227579760817";
-
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
     method: "POST",
@@ -35,23 +32,14 @@ async function getAccessToken() {
 
   const text = await res.text();
   let data = {};
-
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Token response was not JSON: ${text}`);
-  }
-
-  if (!res.ok || !data.access_token) {
-    throw new Error(data.error_description || data.error || text || "Failed to get access token");
-  }
-
+  try { data = JSON.parse(text); } catch { throw new Error(`Token response was not JSON: ${text}`); }
+  if (!res.ok || !data.access_token) { throw new Error("Failed to get access token"); }
   return data.access_token;
 }
 
-// Bumped to v10!
+// Bumped to final-live-v1
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "draft-order-checkout-v10" });
+  res.json({ ok: true, version: "final-live-v1" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -70,8 +58,6 @@ app.post("/create-checkout", async (req, res) => {
         mutation draftOrderCreate($input: DraftOrderInput!) {
           draftOrderCreate(input: $input) {
             draftOrder {
-              id
-              name
               invoiceUrl
             }
             userErrors {
@@ -82,26 +68,16 @@ app.post("/create-checkout", async (req, res) => {
       `,
       variables: {
         input: {
-          // 1. We must include an email so it's not a "ghost" order
           email: "booking@dependablediamondtransportation.com",
-          note: "Generated via Web Calculator",
+          note: "Phone Quote - Web Calculator",
           lineItems: [
             {
-              // 2. We use your real product variant
-              variantId: VARIANT_GID,
+              title: "Transportation Service",
               originalUnitPrice: total.toFixed(2),
-              quantity: 1
+              quantity: 1,
+              requiresShipping: false 
             }
-          ],
-          // 3. We ONLY include a Billing Address to satisfy Shopify Payments.
-          // NO Shipping Address, because this is a service/non-physical product!
-          billingAddress: {
-            address1: "123 Main St",
-            city: "Los Angeles",
-            provinceCode: "CA",
-            countryCode: "US",
-            zip: "90001"
-          }
+          ]
         }
       }
     };
@@ -124,9 +100,8 @@ app.post("/create-checkout", async (req, res) => {
     }
 
     const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
-    const orderName = data.data.draftOrderCreate.draftOrder.name;
 
-    console.log(`=== DRAFT ORDER CREATED: ${orderName} | $${total.toFixed(2)} ===`);
+    console.log(`=== LIVE CHECKOUT GENERATED: $${total.toFixed(2)} ===`);
     
     return res.json({
       checkoutUrl,
