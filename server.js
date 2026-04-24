@@ -14,10 +14,14 @@ app.use(cors({
 
 app.use(express.json());
 
-const SHOP = process.env.SHOPIFY_SHOP;
+// Your Environment Variables
+const SHOP = process.env.SHOPIFY_SHOP; 
 const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
+
+// THE FIX: Your actual public domain
+const CUSTOM_DOMAIN = "dependablediamondtransportation.com"; 
 
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
@@ -46,9 +50,9 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Bumped to v5!
+// Bumped to v6!
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "draft-order-checkout-v5" });
+  res.json({ ok: true, version: "draft-order-checkout-v6" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -67,6 +71,8 @@ app.post("/create-checkout", async (req, res) => {
         mutation draftOrderCreate($input: DraftOrderInput!) {
           draftOrderCreate(input: $input) {
             draftOrder {
+              id
+              name
               invoiceUrl
             }
             userErrors {
@@ -77,9 +83,8 @@ app.post("/create-checkout", async (req, res) => {
       `,
       variables: {
         input: {
-          // THIS IS THE FIX: We inject a placeholder email to give the Draft Order a customer context.
-          // This forces Shopify Payments to initialize the credit card gateway securely.
           email: "booking@dependablediamondtransportation.com",
+          note: "Generated via Web Calculator", // Makes it easy to find in Shopify!
           lineItems: [
             {
               title: "Transportation Service",
@@ -109,10 +114,16 @@ app.post("/create-checkout", async (req, res) => {
       return res.status(400).json({ error: "Failed to create Draft Order." });
     }
 
-    const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
+    let checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
+    const orderName = data.data.draftOrderCreate.draftOrder.name;
 
-    console.log(`=== DRAFT ORDER V5 CREATED: $${total.toFixed(2)} ===`);
+    // CRITICAL FIX: Replace the myshopify URL with your custom domain so the payment gateway works
+    if (checkoutUrl && SHOP) {
+      checkoutUrl = checkoutUrl.replace(SHOP, CUSTOM_DOMAIN);
+    }
 
+    console.log(`=== DRAFT ORDER CREATED: ${orderName} | $${total.toFixed(2)} ===`);
+    
     return res.json({
       checkoutUrl,
       total: total.toFixed(2)
