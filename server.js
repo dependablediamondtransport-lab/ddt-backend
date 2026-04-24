@@ -19,9 +19,6 @@ const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
-// Your original variant ID, formatted as a Global ID for GraphQL
-const VARIANT_GID = "gid://shopify/ProductVariant/47227579760817";
-
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
     method: "POST",
@@ -49,9 +46,9 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Bumped to v4 to check deployment status
+// Bumped to v5!
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "draft-order-checkout-v4" });
+  res.json({ ok: true, version: "draft-order-checkout-v5" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -65,7 +62,6 @@ app.post("/create-checkout", async (req, res) => {
 
     const accessToken = await getAccessToken();
 
-    // GraphQL mutation using your actual Shopify Variant
     const graphqlQuery = {
       query: `
         mutation draftOrderCreate($input: DraftOrderInput!) {
@@ -81,11 +77,15 @@ app.post("/create-checkout", async (req, res) => {
       `,
       variables: {
         input: {
+          // THIS IS THE FIX: We inject a placeholder email to give the Draft Order a customer context.
+          // This forces Shopify Payments to initialize the credit card gateway securely.
+          email: "booking@dependablediamondtransportation.com",
           lineItems: [
             {
-              variantId: VARIANT_GID,
+              title: "Transportation Service",
               originalUnitPrice: total.toFixed(2),
-              quantity: 1
+              quantity: 1,
+              requiresShipping: false
             }
           ]
         }
@@ -111,7 +111,7 @@ app.post("/create-checkout", async (req, res) => {
 
     const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
 
-    console.log(`=== DRAFT ORDER CREATED WITH VARIANT: $${total.toFixed(2)} ===`);
+    console.log(`=== DRAFT ORDER V5 CREATED: $${total.toFixed(2)} ===`);
 
     return res.json({
       checkoutUrl,
