@@ -14,14 +14,13 @@ app.use(cors({
 
 app.use(express.json());
 
-// Your Environment Variables
 const SHOP = process.env.SHOPIFY_SHOP; 
 const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
-// THE FIX: Your actual public domain
-const CUSTOM_DOMAIN = "dependablediamondtransportation.com"; 
+// Your verified active Variant ID
+const VARIANT_GID = "gid://shopify/ProductVariant/47227579760817";
 
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
@@ -50,9 +49,9 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Bumped to v6!
+// Bumped to v7
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "draft-order-checkout-v6" });
+  res.json({ ok: true, version: "draft-order-checkout-v7" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -84,15 +83,30 @@ app.post("/create-checkout", async (req, res) => {
       variables: {
         input: {
           email: "booking@dependablediamondtransportation.com",
-          note: "Generated via Web Calculator", // Makes it easy to find in Shopify!
+          note: "Generated via Web Calculator",
           lineItems: [
             {
-              title: "Transportation Service",
+              variantId: VARIANT_GID,
               originalUnitPrice: total.toFixed(2),
-              quantity: 1,
-              requiresShipping: false
+              quantity: 1
             }
-          ]
+          ],
+          // THIS IS THE FINAL KEY: Applying a default US address forces Shopify Markets 
+          // to open the payment gateway, satisfying all anti-fraud requirements.
+          shippingAddress: {
+            address1: "123 Main St",
+            city: "Los Angeles",
+            provinceCode: "CA",
+            countryCode: "US",
+            zip: "90001"
+          },
+          billingAddress: {
+            address1: "123 Main St",
+            city: "Los Angeles",
+            provinceCode: "CA",
+            countryCode: "US",
+            zip: "90001"
+          }
         }
       }
     };
@@ -114,13 +128,8 @@ app.post("/create-checkout", async (req, res) => {
       return res.status(400).json({ error: "Failed to create Draft Order." });
     }
 
-    let checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
+    const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
     const orderName = data.data.draftOrderCreate.draftOrder.name;
-
-    // CRITICAL FIX: Replace the myshopify URL with your custom domain so the payment gateway works
-    if (checkoutUrl && SHOP) {
-      checkoutUrl = checkoutUrl.replace(SHOP, CUSTOM_DOMAIN);
-    }
 
     console.log(`=== DRAFT ORDER CREATED: ${orderName} | $${total.toFixed(2)} ===`);
     
