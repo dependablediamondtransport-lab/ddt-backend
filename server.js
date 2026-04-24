@@ -19,6 +19,9 @@ const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const PORT = process.env.PORT || 3000;
 
+// Your real Variant ID
+const VARIANT_GID = "gid://shopify/ProductVariant/47227579760817";
+
 async function getAccessToken() {
   const res = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
     method: "POST",
@@ -46,9 +49,9 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Bumped to v8!
+// Bumped to v10!
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "draft-order-checkout-v8" });
+  res.json({ ok: true, version: "draft-order-checkout-v10" });
 });
 
 app.post("/create-checkout", async (req, res) => {
@@ -79,18 +82,19 @@ app.post("/create-checkout", async (req, res) => {
       `,
       variables: {
         input: {
+          // 1. We must include an email so it's not a "ghost" order
           email: "booking@dependablediamondtransportation.com",
           note: "Generated via Web Calculator",
-          // THE ULTIMATE COMBO: Custom Line Item (bypasses the product validation error entirely)
-          // + Billing Address (bypasses the Shopify Payments fraud block)
           lineItems: [
             {
-              title: "Transportation Service",
+              // 2. We use your real product variant
+              variantId: VARIANT_GID,
               originalUnitPrice: total.toFixed(2),
-              quantity: 1,
-              requiresShipping: false
+              quantity: 1
             }
           ],
+          // 3. We ONLY include a Billing Address to satisfy Shopify Payments.
+          // NO Shipping Address, because this is a service/non-physical product!
           billingAddress: {
             address1: "123 Main St",
             city: "Los Angeles",
