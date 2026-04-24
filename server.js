@@ -4,10 +4,7 @@ const cors = require("cors");
 const app = express();
 
 app.use(cors({
-  origin: [
-    "https://dependablediamondtransportation.com",
-    "https://www.dependablediamondtransportation.com"
-  ],
+  origin: ["https://dependablediamondtransportation.com", "https://www.dependablediamondtransportation.com"],
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"]
 }));
@@ -29,55 +26,40 @@ async function getAccessToken() {
       grant_type: "client_credentials"
     })
   });
-
-  const text = await res.text();
-  let data = {};
-  try { data = JSON.parse(text); } catch { throw new Error(`Token response was not JSON: ${text}`); }
-  if (!res.ok || !data.access_token) { throw new Error("Failed to get access token"); }
+  const data = await res.json();
   return data.access_token;
 }
 
-// Bumped to final-live-v1
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "final-live-v1" });
+  res.json({ ok: true, version: "editable-email-v1" });
 });
 
 app.post("/create-checkout", async (req, res) => {
   try {
     const body = req.body || {};
     const total = Number(body.total || 0);
-
-    if (!Number.isFinite(total) || total <= 0) {
-      return res.status(400).json({ error: "Invalid total." });
-    }
-
     const accessToken = await getAccessToken();
 
     const graphqlQuery = {
       query: `
         mutation draftOrderCreate($input: DraftOrderInput!) {
           draftOrderCreate(input: $input) {
-            draftOrder {
-              invoiceUrl
-            }
-            userErrors {
-              message
-            }
+            draftOrder { invoiceUrl }
+            userErrors { message }
           }
         }
       `,
       variables: {
         input: {
-          email: "booking@dependablediamondtransportation.com",
+          // WE REMOVED THE EMAIL LINE HERE
+          // This tells Shopify: "This is a guest checkout, let the person type their info."
           note: "Phone Quote - Web Calculator",
-          lineItems: [
-            {
-              title: "Transportation Service",
-              originalUnitPrice: total.toFixed(2),
-              quantity: 1,
-              requiresShipping: false 
-            }
-          ]
+          lineItems: [{
+            title: "Transportation Service",
+            originalUnitPrice: total.toFixed(2),
+            quantity: 1,
+            requiresShipping: false 
+          }]
         }
       }
     };
@@ -92,30 +74,13 @@ app.post("/create-checkout", async (req, res) => {
     });
 
     const data = await response.json();
-
-    const userErrors = data?.data?.draftOrderCreate?.userErrors || [];
-    if (data.errors || userErrors.length > 0) {
-      console.error("GraphQL Errors:", data.errors || userErrors);
-      return res.status(400).json({ error: "Failed to create Draft Order." });
-    }
-
     const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
-
-    console.log(`=== LIVE CHECKOUT GENERATED: $${total.toFixed(2)} ===`);
     
-    return res.json({
-      checkoutUrl,
-      total: total.toFixed(2)
-    });
+    return res.json({ checkoutUrl, total: total.toFixed(2) });
 
   } catch (error) {
-    console.error("create-checkout error:", error);
-    return res.status(500).json({
-      error: error.message || "Server error creating checkout."
-    });
+    return res.status(500).json({ error: error.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`DDT backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Running on ${PORT}`));
