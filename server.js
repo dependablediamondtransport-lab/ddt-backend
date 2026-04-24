@@ -62,48 +62,70 @@ app.post("/create-checkout", async (req, res) => {
     const body = req.body || {};
     const total = Number(body.total || 0);
 
+    // Ensure the total is valid
     if (!Number.isFinite(total) || total <= 0) {
       return res.status(400).json({ error: "Invalid total." });
     }
 
     const accessToken = await getAccessToken();
 
-    const updateRes = await fetch(`https://${SHOP}/admin/api/2026-04/variants/${VARIANT_ID}.json`, {
-      method: "PUT",
+    // GraphQL mutation to create a Draft Order with a custom line item
+    const graphqlQuery = {
+      query: `
+        mutation draftOrderCreate($input: DraftOrderInput!) {
+          draftOrderCreate(input: $input) {
+            draftOrder {
+              invoiceUrl
+            }
+            userErrors {
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          lineItems: [
+            {
+              title: "Transportation Service", // Name of the service on the checkout page
+              originalUnitPrice: total.toFixed(2), // The price from your HTML calculator
+              quantity: 1,
+              requiresShipping: false // Ensures it doesn't ask for shipping rates
+            }
+          ]
+        }
+      }
+    };
+
+    // Hit the Admin GraphQL API
+    const response = await fetch(`https://${SHOP}/admin/api/2026-04/graphql.json`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": accessToken
       },
-      body: JSON.stringify({
-        variant: {
-          id: Number(VARIANT_ID),
-          price: total.toFixed(2),
-          requires_shipping: false,
-          taxable: false
-        }
-      })
+      body: JSON.stringify(graphqlQuery)
     });
 
-    const updateText = await updateRes.text();
+    const data = await response.json();
 
-    console.log("=== VARIANT UPDATE RESPONSE ===");
-    console.log(updateText);
-
-    if (!updateRes.ok) {
-      return res.status(400).json({
-        error: `Variant update failed: ${updateText}`
-      });
+    // Handle any GraphQL or Shopify user errors
+    const userErrors = data?.data?.draftOrderCreate?.userErrors || [];
+    if (data.errors || userErrors.length > 0) {
+      console.error("GraphQL Errors:", data.errors || userErrors);
+      return res.status(400).json({ error: "Failed to create Draft Order checkout." });
     }
 
-    await sleep(1500);
+    // Extract the secure checkout link (invoice URL)
+    const checkoutUrl = data.data.draftOrderCreate.draftOrder.invoiceUrl;
 
-    const checkoutUrl =
-      `${CHECKOUT_DOMAIN}/cart/clear?return_to=${encodeURIComponent(`/cart/${VARIANT_ID}:1`)}`;
+    console.log("=== CHECKOUT GENERATED ===");
+    console.log(`Amount: $${total.toFixed(2)} | Link: ${checkoutUrl}`);
 
+    // Send it back to your frontend
     return res.json({
       checkoutUrl,
-      total: total.toFixed(2),
-      variantId: VARIANT_ID
+      total: total.toFixed(2)
     });
 
   } catch (error) {
@@ -113,7 +135,6 @@ app.post("/create-checkout", async (req, res) => {
     });
   }
 });
-
 app.listen(PORT, () => {
   console.log(`DDT backend running on port ${PORT}`);
 });
